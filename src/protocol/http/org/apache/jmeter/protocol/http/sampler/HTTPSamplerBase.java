@@ -286,7 +286,7 @@ public abstract class HTTPSamplerBase extends AbstractSampler
 
     private static final String QRY_PFX = "?"; // $NON-NLS-1$
 
-    protected static final int MAX_REDIRECTS = JMeterUtils.getPropDefault("httpsampler.max_redirects", 20); // $NON-NLS-1$
+    protected static final int MAX_REDIRECTS = JMeterUtils.getPropDefault("httpsampler.max_redirects", 50); // $NON-NLS-1$
 
     protected static final int MAX_FRAME_DEPTH = JMeterUtils.getPropDefault("httpsampler.max_frame_depth", 5); // $NON-NLS-1$
 
@@ -1558,50 +1558,53 @@ public abstract class HTTPSamplerBase extends AbstractSampler
         for (redirect = 0; redirect < MAX_REDIRECTS; redirect++) {
             boolean invalidRedirectUrl = false;
             String location = lastRes.getRedirectLocation();
-            log.debug("Initial location: {}", location);
-            if (REMOVESLASHDOTDOT) {
-                location = ConversionUtils.removeSlashDotDot(location);
-            }
-            // Browsers seem to tolerate Location headers with spaces,
-            // replacing them automatically with %20. We want to emulate
-            // this behaviour.
-            location = encodeSpaces(location);
-            log.debug("Location after /. and space transforms: {}", location);
-            // Change all but HEAD into GET (Bug 55450)
-            String method = lastRes.getHTTPMethod();
-            method = computeMethodForRedirect(method);
+            log.info("VACA Initial location: {}", location);
+            if(!location.contains("tarife")){
+                log.info("CEAPA" + location);
+                if (REMOVESLASHDOTDOT) {
+                    location = ConversionUtils.removeSlashDotDot(location);
+                }
+                // Browsers seem to tolerate Location headers with spaces,
+                // replacing them automatically with %20. We want to emulate
+                // this behaviour.
+                location = encodeSpaces(location);
+                log.info("VACA Location after /. and space transforms: {}", location);
+                // Change all but HEAD into GET (Bug 55450)
+                String method = lastRes.getHTTPMethod();
+                method = computeMethodForRedirect(method);
 
-            try {
-                URL url = ConversionUtils.makeRelativeURL(lastRes.getURL(), location);
-                url = ConversionUtils.sanitizeUrl(url).toURL();
-                log.debug("Location as URL: {}", url);
-                HTTPSampleResult tempRes = sample(url, method, true, frameDepth);
-                if (tempRes != null) {
-                    lastRes = tempRes;
+                try {
+                    URL url = ConversionUtils.makeRelativeURL(lastRes.getURL(), location);
+                    url = ConversionUtils.sanitizeUrl(url).toURL();
+                    log.info("VACA Location as URL: {}", url);
+                    HTTPSampleResult tempRes = sample(url, method, true, frameDepth);
+                    if (tempRes != null) {
+                        lastRes = tempRes;
+                    } else {
+                        // Last url was in cache so tempRes is null
+                        break;
+                    }
+                } catch (MalformedURLException | URISyntaxException e) {
+                    errorResult(e, lastRes);
+                    // The redirect URL we got was not a valid URL
+                    invalidRedirectUrl = true;
+                }
+                if (lastRes.getSubResults() != null && lastRes.getSubResults().length > 0) {
+                    SampleResult[] subs = lastRes.getSubResults();
+                    for (SampleResult sub : subs) {
+                        totalRes.addSubResult(sub);
+                    }
                 } else {
-                    // Last url was in cache so tempRes is null
+                    // Only add sample if it is a sample of valid url redirect, i.e. that
+                    // we have actually sampled the URL
+                    if (!invalidRedirectUrl) {
+                        totalRes.addSubResult(lastRes);
+                    }
+                }
+
+                if (!lastRes.isRedirect()) {
                     break;
                 }
-            } catch (MalformedURLException | URISyntaxException e) {
-                errorResult(e, lastRes);
-                // The redirect URL we got was not a valid URL
-                invalidRedirectUrl = true;
-            }
-            if (lastRes.getSubResults() != null && lastRes.getSubResults().length > 0) {
-                SampleResult[] subs = lastRes.getSubResults();
-                for (SampleResult sub : subs) {
-                    totalRes.addSubResult(sub);
-                }
-            } else {
-                // Only add sample if it is a sample of valid url redirect, i.e. that
-                // we have actually sampled the URL
-                if (!invalidRedirectUrl) {
-                    totalRes.addSubResult(lastRes);
-                }
-            }
-
-            if (!lastRes.isRedirect()) {
-                break;
             }
         }
         if (redirect >= MAX_REDIRECTS) {
